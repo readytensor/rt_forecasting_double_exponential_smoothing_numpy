@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 from schema.data_schema import ForecastingSchema
 from sklearn.exceptions import NotFittedError
+from sklearn.linear_model import LinearRegression
 
 warnings.filterwarnings("ignore")
 
 
 PREDICTOR_FILE_NAME = "predictor.joblib"
-
 
 class Forecaster:
     """A Double Expoential Smoothing Forecaster Model."""
@@ -23,7 +23,7 @@ class Forecaster:
         history_forecast_ratio: int = None,
         init_period: int = 10,
         alpha: float = 0.1,
-        beta: float = 0.1,
+        beta: float = 0.05,
         random_state: int = 0,
         **kwargs,
     ):
@@ -44,10 +44,14 @@ class Forecaster:
                 Default is 10.
 
             alpha (float):
-                Smoothing factor for level. Default is 0.1.
+                Smoothing factor for level. 
+                Valid float values are between 0 and 1.
+                Default is 0.1. 
 
             beta (float):
-                Smoothing factor for trend. Default is 0.1.
+                Smoothing factor for trend. 
+                Valid float values are between 0 and 1.
+                Default is 0.05. 
 
             random_state (int): Sets the underlying random seed at model initialization time.
         """
@@ -110,15 +114,19 @@ class Forecaster:
             level = np.mean(time_series)
             trend = 0
         else:
-            level = np.mean(time_series[:self.init_period])
-            trend = (time_series[self.init_period] - time_series[0]) / self.init_period
+            # Use linear regression over the initial period to determine initial level and trend
+            x = np.arange(self.init_period).reshape(-1, 1)
+            y = time_series[:self.init_period]
+            regression = LinearRegression().fit(x, y)
+            level = regression.intercept_
+            trend = regression.coef_[0]
         
         # Apply double exponential smoothing
-        for observation in time_series[1:]:  # Start from second observation to calculate trend correctly
+        for observation in time_series[1:]:  # Start from second observation
             previous_level = level
             level = self.alpha * observation + (1 - self.alpha) * (level + trend)
             trend = self.beta * (level - previous_level) + (1 - self.beta) * trend
-        
+    
         return level, trend
 
     def predict(
