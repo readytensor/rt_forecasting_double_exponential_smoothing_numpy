@@ -13,7 +13,7 @@ from utils import (
     read_csv_in_directory,
     read_json_as_dict,
     set_seeds,
-    TimeAndMemoryTracker,
+    ResourceTracker,
 )
 
 logger = get_logger(task_name="train")
@@ -26,9 +26,6 @@ def run_training(
     train_dir: str = paths.TRAIN_DIR,
     predictor_dir_path: str = paths.PREDICTOR_DIR_PATH,
     default_hyperparameters_file_path: str = paths.DEFAULT_HYPERPARAMETERS_FILE_PATH,
-    run_tuning: bool = False,
-    hpt_specs_file_path: str = paths.HPT_CONFIG_FILE_PATH,
-    hpt_results_dir_path: str = paths.HPT_OUTPUTS_DIR,
 ) -> None:
     """
     Run the training process and saves model artifacts
@@ -43,45 +40,42 @@ def run_training(
             predictor model.
         default_hyperparameters_file_path (str, optional): The path of the default
             hyperparameters file.
-        run_tuning (bool, optional): Whether to run hyperparameter tuning.
-            Default is False.
-        hpt_specs_file_path (str, optional): The path of the configuration file for
-            hyperparameter tuning.
-        hpt_results_dir_path (str, optional): Dir path where to save the HPT results.
     Returns:
         None
     """
 
     try:
-        with TimeAndMemoryTracker(logger) as _:
+        with ResourceTracker(logger, monitoring_interval=0.1):
             logger.info("Starting training...")
             # load and save schema
             logger.info("Loading and saving schema...")
             data_schema = load_json_data_schema(input_schema_dir)
             save_schema(schema=data_schema, save_dir_path=saved_schema_dir_path)
-    
+
             # load model config
             logger.info("Loading model config...")
             model_config = read_json_as_dict(model_config_file_path)
-    
+
             # set seeds
             logger.info("Setting seeds...")
             set_seeds(seed_value=model_config["seed_value"])
-    
+
             # load train data
             logger.info("Loading train data...")
             train_data = read_csv_in_directory(train_dir)
-    
+
             # validate the data
             logger.info("Validating train data...")
             validated_data = validate_data(
                 data=train_data, data_schema=data_schema, is_train=True
             )
-    
+
             # use default hyperparameters to train model
             logger.info("Training forecaster...")
-            default_hyperparameters = read_json_as_dict(default_hyperparameters_file_path)
-            
+            default_hyperparameters = read_json_as_dict(
+                default_hyperparameters_file_path
+            )
+
             forecaster = train_predictor_model(
                 history=validated_data,
                 data_schema=data_schema,
@@ -104,22 +98,5 @@ def run_training(
         raise Exception(f"{err_msg} Error: {str(exc)}") from exc
 
 
-def parse_arguments() -> argparse.Namespace:
-    """Parse the command line argument that indicates if user wants to run
-    hyperparameter tuning."""
-    parser = argparse.ArgumentParser(description="Train a binary classification model.")
-    parser.add_argument(
-        "-t",
-        "--tune",
-        action="store_true",
-        help=(
-            "Run hyperparameter tuning before training the model. "
-            + "If not set, use default hyperparameters.",
-        ),
-    )
-    return parser.parse_args()
-
-
 if __name__ == "__main__":
-    args = parse_arguments()
-    run_training(run_tuning=args.tune)
+    run_training()
